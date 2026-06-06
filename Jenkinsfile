@@ -16,25 +16,32 @@ pipeline {
 
         stage('Clean Old Containers') {
             steps {
-                echo 'Nettoyage des anciens conteneurs du projet...'
+                echo 'Nettoyage des anciens conteneurs CI...'
                 sh '''
                     docker rm -f maf_mysql maf_adminer pfe-ops-backend pfe-ops-frontend || true
-                    docker compose down --remove-orphans || true
+                    docker compose -f docker-compose.ci.yml down --remove-orphans || true
                 '''
             }
         }
 
         stage('Build Images') {
             steps {
-                echo 'Build des images backend/frontend...'
-                sh 'docker compose build backend frontend'
+                echo 'Build des images backend/frontend avec docker-compose.ci.yml...'
+                sh 'docker compose -f docker-compose.ci.yml build backend frontend'
             }
         }
 
         stage('Start Services') {
             steps {
-                echo 'Démarrage des services...'
-                sh 'docker compose up -d mysql backend frontend adminer'
+                echo 'Démarrage des services CI...'
+                sh 'docker compose -f docker-compose.ci.yml up -d mysql backend frontend adminer'
+            }
+        }
+
+        stage('Show Containers') {
+            steps {
+                echo 'État des conteneurs...'
+                sh 'docker compose -f docker-compose.ci.yml ps'
             }
         }
 
@@ -42,8 +49,21 @@ pipeline {
             steps {
                 echo 'Vérification API backend...'
                 sh '''
-                    sleep 20
-                    curl -f http://backend:8000/api/health
+                    sleep 25
+
+                    docker exec pfe-ops-backend python -c "
+import urllib.request
+import sys
+
+url = 'http://127.0.0.1:8000/api/health'
+
+try:
+    response = urllib.request.urlopen(url, timeout=10)
+    print(response.read().decode())
+except Exception as e:
+    print(e)
+    sys.exit(1)
+"
                 '''
             }
         }
@@ -52,7 +72,17 @@ pipeline {
             steps {
                 echo 'Vérification frontend...'
                 sh '''
-                    curl -f http://frontend:15175
+                    docker exec pfe-ops-frontend node -e "
+fetch('http://127.0.0.1:15175')
+  .then(r => {
+    if (!r.ok) process.exit(1);
+    console.log('Frontend OK');
+  })
+  .catch(e => {
+    console.error(e);
+    process.exit(1);
+  });
+"
                 '''
             }
         }
@@ -61,7 +91,19 @@ pipeline {
             steps {
                 echo 'Vérification route /api/jobs...'
                 sh '''
-                    curl -f http://backend:8000/api/jobs
+                    docker exec pfe-ops-backend python -c "
+import urllib.request
+import sys
+
+url = 'http://127.0.0.1:8000/api/jobs'
+
+try:
+    response = urllib.request.urlopen(url, timeout=10)
+    print(response.read().decode())
+except Exception as e:
+    print(e)
+    sys.exit(1)
+"
                 '''
             }
         }
@@ -74,10 +116,10 @@ pipeline {
 
         failure {
             echo 'Pipeline échouée. Affichage des logs utiles...'
-            sh 'docker compose ps || true'
-            sh 'docker compose logs --tail=100 backend || true'
-            sh 'docker compose logs --tail=100 frontend || true'
-            sh 'docker compose logs --tail=100 mysql || true'
+            sh 'docker compose -f docker-compose.ci.yml ps || true'
+            sh 'docker compose -f docker-compose.ci.yml logs --tail=120 backend || true'
+            sh 'docker compose -f docker-compose.ci.yml logs --tail=120 frontend || true'
+            sh 'docker compose -f docker-compose.ci.yml logs --tail=120 mysql || true'
         }
     }
 }
