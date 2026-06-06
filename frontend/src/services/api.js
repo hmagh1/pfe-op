@@ -237,3 +237,37 @@ export async function precheckBasicat(basicat) {
 
   return res.json();
 }
+export async function promoteModel(modelId) {
+  const res = await fetch(`${API_BASE}/ml/promote-model/${encodeURIComponent(modelId)}`, {
+    method: "POST",
+  });
+
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+
+  return res.json();
+}
+
+export async function getActiveModel() {
+  const res = await fetch(`${API_BASE}/ml/active-model`);
+
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+
+  return res.json();
+}
+export async function askRag(question) {
+  const res = await fetch(`${API_BASE}/rag/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+
+  return res.json();
+}

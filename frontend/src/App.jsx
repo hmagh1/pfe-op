@@ -4,6 +4,7 @@ import FileUpload from "./components/FileUpload";
 import EnvDecisionTable from "./components/EnvDecisionTable";
 import SnifPreviewBox from "./components/SnifPreviewBox";
 import PrecheckBasicat from "./components/PrecheckBasicat";
+import RagChatbot from "./components/RagChatbot";
 import {
   createJob,
   getJob,
@@ -18,6 +19,8 @@ import {
   listModelVersions,
   getDecisionStats,
   completeSnifReview,
+  promoteModel,
+  getActiveModel,
   precheckBasicat,
 } from "./services/api";
 import "./style.css";
@@ -43,7 +46,9 @@ function App() {
 
   const [modelVersions, setModelVersions] = useState([]);
   const [modelVersionsLoading, setModelVersionsLoading] = useState(false);
-
+  const [activeModel, setActiveModel] = useState(null);
+  const [activeModelLoading, setActiveModelLoading] = useState(false);
+  const [promotingModelId, setPromotingModelId] = useState("");
   const [showDevMonitoring, setShowDevMonitoring] = useState(false);
   const [decisionStats, setDecisionStats] = useState(null);
   const [decisionStatsLoading, setDecisionStatsLoading] = useState(false);
@@ -248,7 +253,34 @@ function App() {
       setDecisionStatsLoading(false);
     }
   }
+async function loadActiveModel() {
+  try {
+    setActiveModelLoading(true);
+    const data = await getActiveModel();
+    setActiveModel(data.active_model || null);
+  } catch (err) {
+    notify("error", `Erreur modèle actif: ${err.message}`);
+  } finally {
+    setActiveModelLoading(false);
+  }
+}
 
+async function handlePromoteModel(modelId) {
+  try {
+    setPromotingModelId(modelId);
+
+    const result = await promoteModel(modelId);
+    setActiveModel(result.active_model || null);
+
+    await loadModelVersions();
+
+    notify("success", "Modèle promu comme modèle actif.");
+  } catch (err) {
+    notify("error", `Erreur promotion modèle: ${err.message}`);
+  } finally {
+    setPromotingModelId("");
+  }
+}
   async function handleTrainModel() {
     try {
       setMlTrainingLoading(true);
@@ -257,6 +289,7 @@ function App() {
       notify("success", "Modèle ML entraîné avec succès.");
 
       await loadModelVersions();
+      await loadActiveModel();
     } catch (err) {
       notify("error", `Erreur ML: ${err.message}`);
     } finally {
@@ -285,6 +318,7 @@ function App() {
       if (!decisionStats) {
         loadDecisionStats();
       }
+      loadActiveModel();
     }
   }
 
@@ -679,6 +713,36 @@ const canFinishSnifHistoricalReview =
               versions ML, métriques et statistiques des décisions.
             </p>
           </div>
+          <div className="status-banner">
+  <h3>Modèle actif en production</h3>
+
+  {activeModelLoading ? (
+    <p>Chargement du modèle actif...</p>
+  ) : activeModel ? (
+    <>
+      <p>
+        <strong>Model ID:</strong> {activeModel.model_id}
+      </p>
+      <p>
+        <strong>Nom:</strong> {activeModel.model_name || "-"}
+      </p>
+      <p>
+        <strong>Lignes training:</strong> {activeModel.training_rows ?? "-"}
+      </p>
+      <p>
+        <strong>Accuracy:</strong> {formatMetric(activeModel.accuracy)}
+      </p>
+      <p>
+        <strong>F1-score:</strong> {formatMetric(activeModel.f1_score)}
+      </p>
+      <p>
+        <strong>Créé le:</strong> {activeModel.created_at || "-"}
+      </p>
+    </>
+  ) : (
+    <p>Aucun modèle actif sélectionné pour le moment.</p>
+  )}
+</div>
 
           <div className="action-row">
             <button
@@ -804,6 +868,7 @@ const canFinishSnifHistoricalReview =
                   <thead>
                     <tr>
                       <th>Model ID</th>
+                      <th>Actif</th>
                       <th>Rows</th>
                       <th>Excel</th>
                       <th>MySQL</th>
@@ -813,6 +878,7 @@ const canFinishSnifHistoricalReview =
                       <th>Recall</th>
                       <th>F1-score</th>
                       <th>Créé le</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
 
@@ -820,6 +886,7 @@ const canFinishSnifHistoricalReview =
                     {modelVersions.map((model) => (
                       <tr key={model.model_id}>
                         <td>{model.model_id?.slice(0, 18) || "-"}</td>
+                        <td>{model.is_active === "true" ? "✅ Actif" : "Non"}</td>
                         <td>{model.training_rows ?? "-"}</td>
                         <td>{model.excel_rows ?? "-"}</td>
                         <td>{model.mysql_rows ?? "-"}</td>
@@ -829,6 +896,22 @@ const canFinishSnifHistoricalReview =
                         <td>{formatMetric(model.recall)}</td>
                         <td>{formatMetric(model.f1_score)}</td>
                         <td>{model.created_at || "-"}</td>
+                        <td>
+                          {model.is_active === "true" ? (
+                            <span>Déjà actif</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => handlePromoteModel(model.model_id)}
+                              disabled={promotingModelId === model.model_id}
+                            >
+                              {promotingModelId === model.model_id
+                                ? "Promotion..."
+                                : "Promouvoir"}
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -885,7 +968,6 @@ const canFinishSnifHistoricalReview =
           </p>
         </article>
       </section>
-
       <section className="workflow-strip">
         <div className="workflow-progress-track" aria-hidden="true">
           <span style={{ width: workflowProgress }} />
@@ -1182,6 +1264,7 @@ const canFinishSnifHistoricalReview =
           </div>
         </section>
       )}
+      <RagChatbot onNotify={notify} />
     </main>
   );
 }

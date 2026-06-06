@@ -16,9 +16,9 @@ pipeline {
 
         stage('Clean Old CI Containers') {
             steps {
-                echo 'Nettoyage des anciens conteneurs CI sans supprimer la base CI...'
+                echo 'Nettoyage des anciens conteneurs CI sans supprimer les volumes CI...'
                 sh '''
-                    docker rm -f maf_ci_mysql maf_ci_adminer pfe-ops-ci-backend pfe-ops-ci-frontend || true
+                    docker rm -f maf_ci_mysql maf_ci_adminer maf_ci_ollama pfe-ops-ci-backend pfe-ops-ci-frontend || true
                     docker compose -f docker-compose.ci.yml down --remove-orphans || true
                 '''
             }
@@ -34,7 +34,7 @@ pipeline {
         stage('Start CI Services') {
             steps {
                 echo 'Démarrage des services CI...'
-                sh 'docker compose -f docker-compose.ci.yml up -d mysql backend frontend adminer'
+                sh 'docker compose -f docker-compose.ci.yml up -d mysql ollama backend frontend adminer'
             }
         }
 
@@ -45,11 +45,28 @@ pipeline {
             }
         }
 
+        stage('Prepare Ollama Models') {
+            steps {
+                echo 'Préparation des modèles Ollama CI...'
+                sh '''
+                    echo "Attente Ollama..."
+                    sleep 20
+
+                    docker exec maf_ci_ollama ollama list || true
+
+                    docker exec maf_ci_ollama ollama pull llama3.2:3b
+                    docker exec maf_ci_ollama ollama pull llama3.1:8b
+
+                    docker exec maf_ci_ollama ollama list
+                '''
+            }
+        }
+
         stage('Backend Health Check') {
             steps {
                 echo 'Vérification API backend CI...'
                 sh '''
-                    sleep 25
+                    sleep 10
 
                     docker exec pfe-ops-ci-backend python -c "
 import urllib.request
@@ -148,6 +165,15 @@ except Exception as e:
                 '''
             }
         }
+
+        stage('LLM / RAG Functional Tests') {
+            steps {
+                echo 'Test fonctionnel LLM/RAG: MySQL + Excel + Ollama router...'
+                sh '''
+                    docker exec pfe-ops-ci-backend python /app/ci_test_rag_workflow.py
+                '''
+            }
+        }
     }
 
     post {
@@ -161,10 +187,11 @@ except Exception as e:
             sh 'docker compose -f docker-compose.ci.yml logs --tail=150 backend || true'
             sh 'docker compose -f docker-compose.ci.yml logs --tail=150 frontend || true'
             sh 'docker compose -f docker-compose.ci.yml logs --tail=150 mysql || true'
+            sh 'docker compose -f docker-compose.ci.yml logs --tail=150 ollama || true'
         }
 
         always {
-            echo 'Arrêt des conteneurs CI sans suppression de la base de données CI...'
+            echo 'Arrêt des conteneurs CI sans suppression des volumes CI...'
             sh 'docker compose -f docker-compose.ci.yml down --remove-orphans || true'
         }
     }

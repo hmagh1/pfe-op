@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-from sqlalchemy import Column, String, DateTime, Text, Integer, Float
+from sqlalchemy import Column, String, DateTime, Text, Integer, Float, text
 from sqlalchemy.orm import Session
 
 from app.services.db import Base, SessionLocal
@@ -78,7 +78,7 @@ class ModelVersionRecord(Base):
     precision = Column(Float, nullable=True)
     recall = Column(Float, nullable=True)
     f1_score = Column(Float, nullable=True)
-
+    is_active = Column(String(20), index=True, nullable=False, default="false")
     payload_json = Column(Text, nullable=False)
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
@@ -122,7 +122,30 @@ def _to_float(value, default: float | None = None):
         return float(value)
     except Exception:
         return default
+def ensure_model_versions_schema() -> None:
+    """
+    Migration légère pour ajouter la colonne is_active si elle n'existe pas.
 
+    SQLAlchemy create_all() crée les nouvelles tables, mais ne modifie pas
+    automatiquement les tables existantes. Cette fonction évite l'erreur
+    "Unknown column is_active" sur une base déjà créée.
+    """
+    db: Session = SessionLocal()
+
+    try:
+        db.execute(
+            text(
+                """
+                ALTER TABLE model_versions
+                ADD COLUMN is_active VARCHAR(20) NOT NULL DEFAULT 'false'
+                """
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 # =========================
 # JOBS
@@ -613,7 +636,7 @@ def save_model_version(training_result: Dict[str, Any]) -> Dict[str, Any]:
     """
     if not training_result:
         raise ValueError("Résultat d'entraînement vide")
-
+    ensure_model_versions_schema()
     import uuid
 
     info = training_result.get("info") or {}
@@ -658,6 +681,7 @@ def save_model_version(training_result: Dict[str, Any]) -> Dict[str, Any]:
                 or info.get("f1_score")
                 or info.get("f1")
             ),
+            "is_active": str(training_result.get("is_active") or "false"),
             "payload_json": _safe_json_dumps(record_payload),
         }
 
@@ -687,6 +711,7 @@ def list_model_versions(limit: int = 100) -> List[Dict[str, Any]]:
     """
     Liste les versions de modèles entraînées.
     """
+    ensure_model_versions_schema()
     db: Session = SessionLocal()
 
     try:
@@ -712,10 +737,109 @@ def list_model_versions(limit: int = 100) -> List[Dict[str, Any]]:
                 "precision": r.precision,
                 "recall": r.recall,
                 "f1_score": r.f1_score,
+                "is_active": r.is_active,
                 "created_at": r.created_at.isoformat() if r.created_at else "",
             }
             for r in records
         ]
+
+    finally:
+        db.close()
+
+
+
+def promote_model_version(model_id: str) -> Dict[str, Any]:
+    """
+    Promeut une version de modèle comme modèle actif.
+
+    Règle:
+    - un seul modèle actif à la fois
+    - tous les autres modèles deviennent inactifs
+    """
+    ensure_model_versions_schema()
+
+    model_id = str(model_id or "").strip()
+
+    if not model_id:
+        raise ValueError("model_id manquant")
+
+    db: Session = SessionLocal()
+
+    try:
+        target = db.get(ModelVersionRecord, model_id)
+
+        if not target:
+            raise ValueError(f"Modèle introuvable: {model_id}")
+
+        records = db.query(ModelVersionRecord).all()
+
+        for record in records:
+            record.is_active = "true" if record.model_id == model_id else "false"
+
+        db.commit()
+
+        return {
+            "model_id": target.model_id,
+            "model_name": target.model_name,
+            "source": target.source,
+            "model_path": target.model_path,
+            "metrics_path": target.metrics_path,
+            "training_rows": target.training_rows,
+            "excel_rows": target.excel_rows,
+            "mysql_rows": target.mysql_rows,
+            "n_classes": target.n_classes,
+            "accuracy": target.accuracy,
+            "precision": target.precision,
+            "recall": target.recall,
+            "f1_score": target.f1_score,
+            "is_active": target.is_active,
+            "created_at": target.created_at.isoformat() if target.created_at else "",
+        }
+
+    except Exception:
+        db.rollback()
+        raise
+
+    finally:
+        db.close()
+
+
+def get_active_model_version() -> Dict[str, Any] | None:
+    """
+    Retourne le modèle actuellement actif.
+    """
+    ensure_model_versions_schema()
+
+    db: Session = SessionLocal()
+
+    try:
+        record = (
+            db.query(ModelVersionRecord)
+            .filter(ModelVersionRecord.is_active == "true")
+            .order_by(ModelVersionRecord.created_at.desc())
+            .first()
+        )
+
+        if not record:
+            return None
+
+        return {
+            "model_id": record.model_id,
+            "model_name": record.model_name,
+            "source": record.source,
+            "model_path": record.model_path,
+            "metrics_path": record.metrics_path,
+            "training_rows": record.training_rows,
+            "excel_rows": record.excel_rows,
+            "mysql_rows": record.mysql_rows,
+            "n_classes": record.n_classes,
+            "accuracy": record.accuracy,
+            "precision": record.precision,
+            "recall": record.recall,
+            "f1_score": record.f1_score,
+            "is_active": record.is_active,
+            "created_at": record.created_at.isoformat() if record.created_at else "",
+        }
 
     finally:
         db.close()

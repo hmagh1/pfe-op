@@ -7,11 +7,17 @@ services:
       - "18000:8000"
     environment:
       PYTHONUNBUFFERED: "1"
+
       DB_HOST: mysql
       DB_PORT: "3306"
       DB_NAME: maf_db
       DB_USER: maf_user
       DB_PASSWORD: maf_password
+
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: llama3.1:8b
+      OLLAMA_FAST_MODEL: llama3.2:3b
+      OLLAMA_QUALITY_MODEL: llama3.1:8b
     volumes:
       - ./backend:/app
       - ./backend/data:/app/data
@@ -19,6 +25,7 @@ services:
       - ./backend/uploads:/app/uploads
     depends_on:
       - mysql
+      - ollama
 
   frontend:
     build:
@@ -59,6 +66,19 @@ services:
     depends_on:
       - mysql
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: maf_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    gpus: all
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+
   jenkins:
     build:
       context: .
@@ -78,9 +98,8 @@ services:
       - backend
       - frontend
       - mysql
-    networks:
-      - default
 
 volumes:
   mysql_data:
   jenkins_home:
+  ollama_data:

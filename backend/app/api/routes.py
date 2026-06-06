@@ -25,10 +25,13 @@ from app.services.job_store import (
     save_model_version,
     list_model_versions,
     get_decision_stats,
+    promote_model_version,
+    get_active_model_version,
 )
 from app.services import llm_service, ml_service, maf_core
 from app.services.precheck_service import precheck_basicat
-
+from pydantic import BaseModel
+from app.services.rag_service import ask_rag
 router = APIRouter()
 
 
@@ -300,7 +303,30 @@ def ml_model_versions():
         return {"models": list_model_versions()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+@router.post("/ml/promote-model/{model_id}")
+def ml_promote_model(model_id: str):
+    try:
+        return {
+            "status": "promoted",
+            "active_model": promote_model_version(model_id),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/ml/active-model")
+def ml_active_model():
+    try:
+        active = get_active_model_version()
+
+        return {
+            "active_model": active,
+            "has_active_model": active is not None,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/ml/decision-stats")
 def ml_decision_stats():
@@ -309,7 +335,33 @@ def ml_decision_stats():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/rag/ask")
+def rag_ask(payload: dict = Body(...)):
+    try:
+        question = payload.get("question") if isinstance(payload, dict) else None
 
+        if not question:
+            raise ValueError("Question manquante dans le body JSON.")
+
+        return ask_rag(question)
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/rag/ask")
+def rag_ask_get(question: str):
+    try:
+        return ask_rag(question)
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 @router.post("/ml/train")
 def ml_train():
     try:
