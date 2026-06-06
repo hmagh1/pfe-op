@@ -108,6 +108,38 @@ except Exception as e:
             }
         }
 
+        stage('Precheck BASICAT API Check') {
+            steps {
+                echo 'Vérification route /api/precheck-basicat/GRC CI...'
+                sh '''
+                    docker exec pfe-ops-ci-backend python -c "
+import json
+import urllib.request
+import sys
+
+url = 'http://127.0.0.1:8000/api/precheck-basicat/GRC'
+
+try:
+    response = urllib.request.urlopen(url, timeout=20)
+    data = json.loads(response.read().decode())
+    print(json.dumps(data, indent=2, ensure_ascii=False))
+
+    if 'ready' not in data:
+        print('Champ ready manquant dans le precheck')
+        sys.exit(1)
+
+    if 'checks' not in data:
+        print('Champ checks manquant dans le precheck')
+        sys.exit(1)
+
+except Exception as e:
+    print(e)
+    sys.exit(1)
+"
+                '''
+            }
+        }
+
         stage('MAF Functional Workflow Test') {
             steps {
                 echo 'Test fonctionnel métier MAF + ML sur environnement CI...'
@@ -129,6 +161,11 @@ except Exception as e:
             sh 'docker compose -f docker-compose.ci.yml logs --tail=150 backend || true'
             sh 'docker compose -f docker-compose.ci.yml logs --tail=150 frontend || true'
             sh 'docker compose -f docker-compose.ci.yml logs --tail=150 mysql || true'
+        }
+
+        always {
+            echo 'Arrêt des conteneurs CI sans suppression de la base de données CI...'
+            sh 'docker compose -f docker-compose.ci.yml down --remove-orphans || true'
         }
     }
 }
