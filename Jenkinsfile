@@ -19,7 +19,7 @@ pipeline {
                 echo 'Nettoyage des anciens conteneurs CI...'
                 sh '''
                     docker rm -f maf_mysql maf_adminer pfe-ops-backend pfe-ops-frontend || true
-                    docker compose -f docker-compose.ci.yml down --remove-orphans || true
+                    docker compose -f docker-compose.ci.yml down -v --remove-orphans || true
                 '''
             }
         }

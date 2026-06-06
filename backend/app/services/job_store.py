@@ -26,7 +26,7 @@ class JobDecisionRecord(Base):
     decision_id = Column(String(100), primary_key=True, index=True)
     job_id = Column(String(64), index=True, nullable=False)
     basicat = Column(String(100), index=True, nullable=False)
-    technical_signature = Column(String(1000), index=True, nullable=True)
+    technical_signature = Column(Text, nullable=True)
     env = Column(String(50), index=True, nullable=True)
     from_phase = Column(String(100), index=True, nullable=True)
     action = Column(String(50), index=True, nullable=True)
