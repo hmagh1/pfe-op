@@ -14,6 +14,16 @@ pipeline {
             }
         }
 
+        stage('Clean Old Containers') {
+            steps {
+                echo 'Nettoyage des anciens conteneurs du projet...'
+                sh '''
+                    docker rm -f maf_mysql maf_adminer pfe-ops-backend pfe-ops-frontend || true
+                    docker compose down --remove-orphans || true
+                '''
+            }
+        }
+
         stage('Build Images') {
             steps {
                 echo 'Build des images backend/frontend...'
@@ -32,7 +42,7 @@ pipeline {
             steps {
                 echo 'Vérification API backend...'
                 sh '''
-                    sleep 15
+                    sleep 20
                     curl -f http://backend:8000/api/health
                 '''
             }
