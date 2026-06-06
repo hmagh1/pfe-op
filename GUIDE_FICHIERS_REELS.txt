@@ -1,0 +1,278 @@
+================================================================================
+GUIDE : UTILISER LE SYSTÈME AVEC TES VRAIS FICHIERS EXCEL
+================================================================================
+
+Une fois que tu as tes fichiers Excel réels, voici les étapes pour les intégrer.
+
+================================================================================
+ÉTAPE 1 : PRÉPARER TES FICHIERS RÉELS
+================================================================================
+
+Tu dois avoir 3 fichiers Excel :
+
+1. VMLISTE (inventaire des BASICAT, applications, IPs)
+   Colonnes requises :
+   - BASICAT (ou BASIC_CAT, CODE_BASICAT, etc.)
+   - PRODUCTION (ou ENV, ENVIRONMENT)
+   - SGIC (ou SG, SECURITY_GROUP)
+   - NAME (ou APP_NAME, APPLICATION)
+   - IP (ou IP_ADDRESS, SRC_IP)
+   - IDCARTO (ou ID, APPL_ID)
+   
+   Note: Les noms exacts n'importent pas !
+   Le système détecte automatiquement les colonnes.
+
+2. BDD (Base de données des flux réseau)
+   Colonnes requises :
+   - protocol (TCP, UDP, etc.)
+   - port (numéro ou plage)
+   - src_ip (IP source)
+   - dst_ip (IP destination)
+   - flowMainSG (groupe de sécurité source)
+   - flowGrefSG (groupe de sécurité destination)
+   - direction (inbound, outbound, bidirectional)
+   - flux (type de flux : service, client, etc.)
+   - Nom (nom du service)
+   
+   Note: La BDD contient les règles "apprises" du système.
+
+3. SNIF (Fichier de configuration réseau à valider)
+   Colonnes requises :
+   - Name (nom du service)
+   - Direction (IN/OUT/bidirectional)
+   - IP Protocol (TCP/UDP)
+   - port (numéro de port)
+   - Configured Service (nom du service)
+   - Configured Source (IP source ou groupe)
+   - Configured Destination (IP destination ou groupe)
+   
+   Note: C'est le fichier que tu uploaderas dans l'UI (prod et/ou horsprod).
+
+================================================================================
+ÉTAPE 2 : PLACER LES FICHIERS DANS LE BON DOSSIER
+================================================================================
+
+Chemin : backend/data/
+
+Copie tes 3 fichiers (VMLISTE, BDD, SNIF) dans :
+c:\Users\hassa\Downloads\MAF-V5-5\maf_webapp_skeleton\backend\data\
+
+Exemple :
+  backend/data/vmliste_prod_2024.xlsx
+  backend/data/bdd_flux_2024.xlsx
+  backend/data/snif_template.xlsx
+
+Le système détectera automatiquement les fichiers par leurs colonnes.
+
+================================================================================
+ÉTAPE 3 : TESTER LA DÉTECTION AUTOMATIQUE
+================================================================================
+
+Avant de lancer le système, vérifie que les fichiers sont bien détectés.
+
+Ouvre PowerShell et exécute :
+
+  cd c:\Users\hassa\Downloads\MAF-V5-5\maf_webapp_skeleton\backend
+  python test_file_detection.py
+
+Résultats attendus :
+
+  ✓ Vmliste chargée (XXX lignes)
+  ✓ BDD chargée (XXX lignes)
+  ✓ TOUS LES TESTS RÉUSSIS
+
+Si tu vois des erreurs :
+  - Vérifie que les fichiers sont dans backend/data/
+  - Vérifie que les colonnes existent (même avec des noms différents)
+  - Consulte les logs pour voir quelles colonnes ont été détectées
+
+================================================================================
+ÉTAPE 4 : LANCER LE SYSTÈME
+================================================================================
+
+Une fois la détection OK, lance le système normalement :
+
+Option A (terminal unique, frontend + backend) :
+  Ouvre PowerShell dans le dossier racine et exécute :
+  
+  .\run_all.bat
+
+Option B (deux terminaux séparés - recommandé pour debug) :
+
+  Terminal 1 (Backend) :
+    cd backend
+    .\run_backend.bat
+      # Le serveur démarre sur http://127.0.0.1:18000
+
+  Terminal 2 (Frontend) :
+    cd frontend
+    npm run dev
+      # L'interface ouvre sur http://localhost:15173
+
+================================================================================
+ÉTAPE 5 : UTILISER L'INTERFACE
+================================================================================
+
+Une fois le système lancé :
+
+1. Ouvre http://localhost:15173 (ou http://127.0.0.1:15173)
+
+2. **Étape 1 - Générer FR** :
+   - Entre un BASICAT (ex: OPS, BI, FACTU)
+   - Clique "Générer FR"
+   - Le système génère le fichier FR avec les lignes à valider
+
+3. **Étape 2 - Valider FR** :
+   - Tu vois une table avec les décisions en attente
+   - Pour chaque ligne : clique "Valider" ou "Non (corriger)"
+   - Si correction : modifie les champs et valide
+   - Une fois toutes les lignes validées → passe à Étape 3
+
+4. **Étape 3.1 - Upload SNIF PROD** :
+   - Clique "Choisir un fichier"
+   - Sélectionne ton fichier SNIF (pour prod)
+   - Le système traite et affiche les lignes à valider
+   - Valide les décisions
+
+5. **Étape 3.2 - Upload SNIF HORSPROD** (si applicable) :
+   - Après validation PROD, tu vois Étape 3.2
+   - Répète le même processus pour horsprod
+   - Valide les décisions
+
+6. **Étape 4 - Générer MAF final** :
+   - Une fois tous les SNIF traités
+   - Clique "Générer MAF final"
+   - Le système crée le fichier MAF combiné
+
+================================================================================
+ÉTAPE 6 : VÉRIFIER LES OUTPUTS
+================================================================================
+
+Tous les fichiers générés se trouvent dans :
+
+backend/outputs/output_basicat/<BASICAT>/<ENV>/
+
+Exemple pour BASICAT=OPS, ENV=prod :
+  backend/outputs/output_basicat/OPS/prod/
+    - OPS_prod-FR.xlsx (fichier FR généré)
+    - OPS_prod_snif.xlsx (fichier SNIF traité)
+    - OPS_prod_MAF.xlsx (fichier MAF final)
+
+Tu peux télécharger ces fichiers directement depuis l'interface.
+
+================================================================================
+ÉTAPE 7 : APPRENTISSAGE AUTOMATIQUE (BDD)
+================================================================================
+
+Chaque décision que tu valides ou corriges est sauvegardée dans la BDD.
+
+Processus automatique :
+  1. Tu valides une ligne → la BDD est mise à jour
+  2. Un backup est créé automatiquement
+  3. Au prochain run, le système utilise la BDD mise à jour
+  4. Les lignes similaires sont reconnues plus vite
+
+Les backups de la BDD se trouvent dans :
+  backend/data/bdd_backups/
+
+================================================================================
+ÉTAPE 8 : TROUBLESHOOTING
+================================================================================
+
+Si le système n'arrive pas à détecter les fichiers :
+
+1. Vérifier les colonnes réelles :
+   - Ouvre ton fichier Excel
+   - Note les noms exacts des colonnes
+   - Copie-les et envoie-moi
+
+2. Vérifier les logs du backend :
+   - Regarde la console PowerShell (Terminal 1)
+   - Cherche les messages "Détection" ou "ERROR"
+   - Note les colonnes détectées vs attendues
+
+3. Ajuster les signatures (si vraiment nécessaire) :
+   - Fichier : backend/app/services/file_detector.py
+   - Cherche : VMLISTE_SIGNATURE, BDD_SIGNATURE, SNIF_SIGNATURE
+   - Ajoute tes noms de colonnes si la détection échoue
+   - Sauvegarde et redémarre
+
+Exemple d'ajustement (si ta colonne s'appelle "IP_ADDR" au lieu de "IP") :
+  
+  Dans VMLISTE_SIGNATURE, change :
+    VMLISTE_SIGNATURE = [..., "IP", ...]
+  En :
+    VMLISTE_SIGNATURE = [..., "IP_ADDR", ...]
+
+Ou pour plus de flexibilité, ajoute les deux :
+    VMLISTE_SIGNATURE = [..., "IP", "IP_ADDR", ...]
+
+================================================================================
+ÉTAPE 9 : QUESTIONS FRÉQUENTES
+================================================================================
+
+Q: Puis-je utiliser des fichiers avec plus de colonnes que nécessaires ?
+R: Oui ! Le système prend seulement les colonnes dont il a besoin.
+
+Q: Que se passe-t-il si deux colonnes matchent plusieurs colonnes requises ?
+R: Le système utilise la colonne avec le meilleur score et ne la réutilise pas.
+
+Q: Puis-je changer les noms des fichiers ?
+R: Oui, n'importe quel nom. La détection fonctionne par colonnes, pas par nom.
+
+Q: Qu'est-ce qu'une "décision" ?
+R: Une ligne qui ne correspond pas exactement à la BDD. 
+   Le système propose un flux/nom et tu valides ou corriges.
+
+Q: Où sont stockées les corrections que je fais ?
+R: Dans la BDD (backend/data/bdd_flux_maf.xlsx) avec backup automatique.
+
+Q: Puis-je relancer le même BASICAT plusieurs fois ?
+R: Oui, la BDD se met à jour à chaque validation.
+
+Q: Les fichiers SNIF doivent être spécifiques à prod et horsprod ?
+R: Oui, tu dois uploader un fichier par environnement.
+
+Q: Que faire si j'ai une erreur "Impossible de mapper les colonnes" ?
+R: Tes colonnes ne matchent pas assez avec les colonnes attendues.
+   Ouvre test_file_detection.py et regarde les détails.
+
+================================================================================
+ÉTAPE 10 : SUPPORT ET LOGS
+================================================================================
+
+Si quelque chose ne fonctionne pas :
+
+1. Collecte les logs :
+   - Terminal Backend : copie tout ce qui s'affiche
+   - Console navigateur : F12 → Console tab
+   - Fichiers : backend/outputs/run_logs/*.xlsx
+
+2. Envoie-moi :
+   - Les noms exacts de tes fichiers
+   - Les colonnes exactes dans chaque fichier (copie depuis Excel)
+   - Les logs du backend et frontend
+   - Les messages d'erreur complets
+
+3. Je vais :
+   - Analyser les colonnes
+   - Ajuster la détection si nécessaire
+   - Tester avec tes vrais fichiers
+
+================================================================================
+RÉSUMÉ RAPIDE
+================================================================================
+
+Juste pour rappel, quand tu as tes fichiers :
+
+1. Copie les 3 Excel dans backend/data/
+2. Lance : python test_file_detection.py
+3. Si OK → Lance le système (run_all.bat ou terminal séparé)
+4. Utilise l'interface : FR → SNIF PROD → SNIF HORSPROD → MAF
+5. Les outputs sont dans backend/outputs/output_basicat/
+
+C'est tout ! Le reste est automatique.
+
+================================================================================
+Bonne chance avec tes vrais fichiers ! 🚀
+================================================================================

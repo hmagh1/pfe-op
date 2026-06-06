@@ -1,0 +1,425 @@
+================================================================================
+GUIDE POUR RENDRE LE PROJET MLOPS
+================================================================================
+
+Objectif : transformer ce projet en pipeline MLOps reproductible, traçable,
+automatisée et exploitable en production.
+
+Le principe général est simple :
+- les données entrent dans une pipeline standardisée
+- le modèle / la logique métier est entraîné ou mis à jour automatiquement
+- chaque exécution est versionnée
+- les résultats sont testés, validés et déployés de façon contrôlée
+- les retours utilisateurs servent à améliorer le système
+
+================================================================================
+1. CE QU'IL FAUT AJOUTER POUR FAIRE DU VRAI MLOPS
+================================================================================
+
+Pour rendre le projet MLOps, il faut structurer 6 blocs :
+
+1. Données
+- ingestion automatique des fichiers
+- validation du schéma des colonnes
+- détection des fichiers réels
+- contrôle qualité des données
+- versionnage des jeux de données
+
+2. Features / préparation
+- normalisation des colonnes
+- nettoyage des valeurs
+- mapping automatique des champs
+- génération de variables utiles
+- traçabilité des transformations
+
+3. Entraînement / apprentissage
+- entraînement du modèle sur les décisions validées
+- réentraînement planifié ou déclenché par événement
+- sauvegarde de la version du modèle
+- sauvegarde des métriques
+
+4. Évaluation
+- mesure de précision, rappel, F1, taux d'erreur
+- comparaison avec la version précédente
+- validation avant mise en production
+
+5. Déploiement
+- déploiement automatique si le modèle passe les tests
+- rollback facile si la nouvelle version est mauvaise
+- séparation entre dev, test et prod
+
+6. Monitoring / amélioration continue
+- suivi des erreurs
+- suivi du drift des données
+- suivi du taux de corrections manuelles
+- boucle de feedback vers le réentraînement
+
+================================================================================
+2. PIPELINE MLOPS PROPOSÉE POUR CE PROJET
+================================================================================
+
+Vue rapide de la sous-pipeline BASICAT :
+
+┌──────────────────────┐
+│  JOB 1               │
+│  basicat_init        │
+│  Saisie du BASICAT   │
+└──────────┬───────────┘
+           │
+           v
+┌──────────────────────┐
+│  JOB 2               │
+│  load_data           │
+│  Charger VMLISTE /   │
+│  BDD / fichiers      │
+└──────────┬───────────┘
+           │
+           v
+┌──────────────────────┐
+│  JOB 3               │
+│  detect_env          │
+│  PRODUCTION +        │
+│  UTILISATION         │
+└──────────┬───────────┘
+           │
+           v
+┌──────────────────────┐
+│  JOB 4               │
+│  generate_fr         │
+│  Créer le FR         │
+└──────────┬───────────┘
+           │
+           v
+┌──────────────────────┐
+│  JOB 5               │
+│  validate_fr         │
+│  Validation humaine  │
+└──────────┬───────────┘
+           │
+           ├───────────────┐
+           │               │
+           v               v
+┌──────────────────────┐   ┌──────────────────────┐
+│  JOB 6A              │   │  JOB 6B              │
+│  snif_prod           │   │  snif_horsprod       │
+│  Validation PROD     │   │  Validation HORSPROD │
+└──────────┬───────────┘   └──────────┬───────────┘
+           │                           │
+           └───────────────┬───────────┘
+                           v
+┌──────────────────────┐
+│  JOB 7               │
+│  finalize_maf        │
+│  Générer le MAF final│
+└──────────┬───────────┘
+           │
+           v
+┌──────────────────────┐
+│  JOB 8               │
+│  learn_feedback      │
+│  Sauver les labels   │
+└──────────────────────┘
+
+Lecture du schéma :
+- chaque bloc représente un job GitLab ou une sous-étape technique
+- le BASICAT est le déclencheur initial de toute la chaîne
+- les branches PROD et HORSPROD se séparent après la validation FR
+- la sortie finale alimente ensuite l'apprentissage et le monitoring
+
+Pipeline complète recommandée :
+
+Étape 0 - Ingestion
+- récupérer les fichiers Excel réels
+- détecter automatiquement les noms de fichiers
+- détecter automatiquement les colonnes
+- charger VMLISTE, BDD et SNIF
+
+Étape 1 - Validation des données
+- vérifier qu'il existe bien les colonnes attendues
+- vérifier les valeurs obligatoires
+- détecter les lignes vides, incohérentes ou dupliquées
+- rejeter ou signaler les fichiers non conformes
+
+Étape 2 - Préparation des données
+- normaliser les textes
+- harmoniser les noms de colonnes
+- convertir les valeurs de PROD / HORSPROD
+- préparer les datasets pour le moteur métier / ML
+
+Étape 3 - Génération du FR
+- générer le fichier FR à partir de la VMLISTE
+- classer les lignes en prod / horsprod
+- garder l'historique des décisions
+
+Étape 4 - Validation humaine
+- l'utilisateur valide ou corrige les décisions
+- les corrections sont enregistrées
+- ces corrections servent de labels pour l'apprentissage
+
+Étape 5 - Génération SNIF
+- traiter les fichiers SNIF PROD puis HORSPROD
+- appliquer la même logique de mapping
+- produire les fichiers intermédiaires et les sorties finales
+
+Étape 6 - Entraînement du modèle
+- utiliser les décisions validées comme dataset d'apprentissage
+- entraîner un modèle de classification / scoring
+- comparer les résultats avec la version précédente
+
+Étape 7 - Évaluation automatique
+- calculer les métriques
+- vérifier les seuils minimums de qualité
+- bloquer le déploiement si les métriques chutent
+
+Étape 8 - Déploiement
+- enregistrer la nouvelle version du modèle
+- publier l'artefact dans un registre
+- redémarrer le service si nécessaire
+
+Étape 9 - Monitoring
+- surveiller les erreurs de classification
+- surveiller les changements de distribution des données
+- surveiller les corrections manuelles fréquentes
+- déclencher un réentraînement si le système se dégrade
+
+================================================================================
+2.1 SOUS-PIPELINE BASICAT DÉCLENCHÉE PAR LE CODE BASICAT
+================================================================================
+
+Dans le gros projet, la première grande pipeline GitLab commence quand on saisit
+un code BASICAT. L'objectif est de créer une sous-pipeline dédiée à ce BASICAT.
+
+Déclencheur :
+- l'utilisateur saisit un code BASICAT
+- le backend reçoit ce code
+- une sous-pipeline est lancée uniquement pour ce BASICAT
+- toutes les étapes suivantes sont exécutées pour ce périmètre précis
+
+Ce que cette sous-pipeline doit faire :
+- isoler les données du BASICAT demandé
+- déterminer les environnements prod / horsprod
+- générer les fichiers FR et SNIF correspondant à ce BASICAT
+- faire valider les décisions par l'utilisateur
+- enregistrer les corrections pour l'apprentissage futur
+- produire le MAF final du BASICAT
+
+Ordre de la sous-pipeline BASICAT :
+
+1. Réception du code BASICAT
+- l'utilisateur entre le code
+- le système vérifie que le code existe dans la VMLISTE
+- si le code n'existe pas, la sous-pipeline s'arrête avec une erreur claire
+
+2. Chargement des données utiles
+- récupérer les lignes du BASICAT dans la VMLISTE
+- charger la BDD
+- détecter et mapper les colonnes automatiquement si besoin
+
+3. Détermination de l'environnement
+- lire les colonnes PRODUCTION et UTILISATION
+- consolider les deux colonnes pour décider prod ou horsprod
+- séparer les lignes par environnement
+
+4. Génération du FR
+- créer le FR pour le BASICAT
+- préparer les lignes à valider
+- conserver les métadonnées de traitement
+
+5. Validation humaine du FR
+- afficher les décisions à l'utilisateur
+- valider ou corriger chaque ligne
+- sauvegarder les corrections
+
+6. Génération SNIF prod
+- lancer la sous-étape SNIF pour prod
+- traiter uniquement les lignes prod
+- faire valider les propositions par l'utilisateur
+
+7. Génération SNIF horsprod
+- lancer la sous-étape SNIF pour horsprod
+- traiter uniquement les lignes horsprod
+- faire valider les propositions par l'utilisateur
+
+8. Génération MAF final
+- regrouper les résultats validés
+- produire le fichier final du BASICAT
+- archiver les sorties dans le bon dossier
+
+9. Enregistrement pour réapprentissage
+- stocker les corrections utilisateur
+- alimenter la base d'apprentissage
+- préparer la prochaine exécution du même BASICAT
+
+Ce qu'il faut faire dans le code pour supporter cette sous-pipeline :
+- garder le BASICAT comme identifiant de sous-pipeline
+- stocker l'état de progression de chaque BASICAT
+- garder séparés les états FR, SNIF prod, SNIF horsprod et MAF final
+- ne jamais mélanger les décisions d'un BASICAT avec un autre
+- relancer seulement l'étape nécessaire quand l'utilisateur valide une partie
+
+================================================================================
+
+================================================================================
+3. ARCHITECTURE CIBLE MLOPS
+================================================================================
+
+Architecture recommandée :
+
+- Frontend React
+  - upload des fichiers
+  - validation des résultats
+  - visualisation des étapes
+
+- Backend FastAPI
+  - orchestration du workflow
+  - logique métier
+  - endpoints d'upload, validation et génération
+
+- Module data/feature engineering
+  - nettoyage
+  - mapping des colonnes
+  - détection de structure
+
+- Module ML
+  - entraînement
+  - scoring
+  - prédiction
+  - sauvegarde du modèle
+
+- Stockage
+  - datasets d'entrée
+  - sorties générées
+  - backups
+  - modèles versionnés
+
+- Observabilité
+  - logs
+  - métriques
+  - historique des décisions
+
+================================================================================
+4. ÉTAPES TECHNIQUES POUR LE RENDRE MLOPS
+================================================================================
+
+1. Séparer le code métier du code ML
+- garder la logique FR / SNIF dans des services dédiés
+- mettre l'apprentissage dans un module séparé
+
+2. Versionner les données
+- stocker chaque dataset traité avec un identifiant de version
+- garder le lien entre données source et résultats
+
+3. Versionner les modèles
+- sauvegarder chaque modèle entraîné
+- enregistrer les paramètres, la date et les métriques
+
+4. Ajouter des tests automatiques
+- tests de structure des fichiers
+- tests de cohérence des colonnes
+- tests de non-régression sur les sorties
+
+5. Ajouter du monitoring
+- logs structurés
+- alertes sur erreurs fréquentes
+- suivi des performances au fil du temps
+
+6. Ajouter un pipeline CI/CD
+- lancer les tests automatiquement
+- valider l'entraînement avant déploiement
+- déployer uniquement si tout est OK
+
+7. Ajouter un registre de modèles
+- garder l'historique des versions
+- pouvoir revenir en arrière facilement
+
+================================================================================
+5. EXEMPLE DE PIPELINE AUTOMATISÉE
+================================================================================
+
+Exemple de chaîne MLOps :
+
+- dépôt de nouveaux fichiers Excel dans backend/data/
+- détection automatique des fichiers
+- validation du schéma
+- génération du FR
+- validation utilisateur
+- apprentissage à partir des corrections
+- entraînement du modèle
+- évaluation des métriques
+- enregistrement du nouveau modèle
+- déploiement de la version validée
+- monitoring en production
+- déclenchement d'un nouveau cycle si besoin
+
+================================================================================
+6. DONNÉES À CONSERVER POUR L'APPRENTISSAGE
+================================================================================
+
+À chaque exécution, il faut stocker :
+
+- fichier source utilisé
+- colonne UTILISATION
+- colonne PRODUCTION
+- décision finale prod / horsprod
+- validation humaine
+- correction éventuelle
+- score du modèle
+- version du modèle utilisée
+- date d'exécution
+- BASICAT concerné
+- environnement concerné
+
+Ces éléments servent à reconstruire l'historique et à réentraîner le modèle.
+
+================================================================================
+7. BOUCLE DE FEEDBACK
+================================================================================
+
+La boucle MLOps doit fonctionner comme ça :
+
+1. Le système prédit
+2. L'utilisateur valide ou corrige
+3. Les corrections sont enregistrées
+4. Le dataset d'entraînement est enrichi
+5. Le modèle est réentraîné
+6. Le nouveau modèle est évalué
+7. S'il est meilleur, il est déployé
+8. Sinon, on garde l'ancienne version
+
+================================================================================
+8. PRIORITÉS POUR CE PROJET
+================================================================================
+
+Priorité 1
+- fiabiliser la détection des fichiers et des colonnes
+- garder la logique métier actuelle stable
+
+Priorité 2
+- enregistrer les validations utilisateur comme données d'apprentissage
+
+Priorité 3
+- construire un vrai module ML de classification
+
+Priorité 4
+- ajouter l'entraînement automatique et le réentraînement périodique
+
+Priorité 5
+- mettre en place un suivi de performance et de drift
+
+================================================================================
+9. CONCLUSION
+================================================================================
+
+Pour rendre ce projet MLOps, il faut passer d'un système qui "génère des fichiers"
+à un système qui :
+- apprend des validations
+- versionne ses données et ses modèles
+- s'évalue automatiquement
+- se déploie de manière contrôlée
+- se surveille en continu
+
+Autrement dit :
+le projet doit devenir une boucle continue
+Données -> Traitement -> Modèle -> Validation -> Déploiement -> Monitoring -> Réapprentissage
+
+================================================================================

@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+pandas
+openpyxl
+numpy
+scikit-learn
+python-multipart
+
+
+
+cd front
+npm install 
+npm run dev

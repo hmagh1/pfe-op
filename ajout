@@ -1,0 +1,74 @@
+import argparse
+import pandas as pd
+import glob
+import os
+import sys
+
+def find_applications_file():
+	# Cherche common locations dans le workspace
+	patterns = [
+		"output_basicat/**/applications_ip.xlsx",
+		"**/applications_ip.xlsx",
+		"applications_ip.xlsx",
+	]
+	for p in patterns:
+		found = glob.glob(p, recursive=True)
+		if found:
+			return found
+	return []
+
+def build_query_from_df(df):
+	# robust: detecte colonne 'name' ou alternatives
+	candidates = [c for c in df.columns if str(c).strip().lower() in ("name","vm","vm_name","vmname")]
+	if not candidates:
+		return None, df.columns.tolist()
+
+	col = candidates[0]
+	noms_vm = df[col].dropna().astype(str).tolist()
+	if not noms_vm:
+		return None, [col]
+
+	chaine_vm = 'Flow in last 31 days where VM = "' + '" OR VM = "'.join(noms_vm) + '"'
+	return chaine_vm, col
+
+def main():
+	parser = argparse.ArgumentParser(description="Génère la requête VM depuis applications_ip.xlsx")
+	parser.add_argument("--file", "-f", help="Chemin vers le fichier applications_ip.xlsx", default=None)
+	args = parser.parse_args()
+
+	path = args.file
+	if not path:
+		found = find_applications_file()
+		if not found:
+			print("Aucun fichier applications_ip.xlsx trouvé. Passez --file ou placez le fichier sous output_basicat/...")
+			sys.exit(1)
+		if len(found) > 1:
+			print("Plusieurs fichiers trouvés, j'utilise le premier :")
+			for f in found:
+				print(" -", f)
+		path = found[0]
+
+	if not os.path.exists(path):
+		print(f"Fichier introuvable: {path}")
+		sys.exit(1)
+
+	try:
+		df = pd.read_excel(path)
+	except Exception as e:
+		print(f"Erreur lecture Excel: {e}")
+		sys.exit(1)
+
+	query, info = build_query_from_df(df)
+	if query is None:
+		print("Impossible de générer la requête — colonne 'name' introuvable ou vide.")
+		print("Colonnes disponibles:", info)
+		sys.exit(1)
+
+	print("Fichier utilisé:", path)
+	print("Premières lignes du fichier:")
+	print(df.head(5).to_string(index=False))
+	print("\n--- Requête générée ---")
+	print(query)
+
+if __name__ == "__main__":
+	main()
