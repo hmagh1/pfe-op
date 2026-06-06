@@ -107,6 +107,15 @@ except Exception as e:
                 '''
             }
         }
+
+        stage('MAF Functional Workflow Test') {
+            steps {
+                echo 'Test fonctionnel métier MAF + ML...'
+                sh '''
+                    docker exec pfe-ops-backend python /app/ci_test_maf_workflow.py
+                '''
+            }
+        }
     }
 
     post {
@@ -117,9 +126,9 @@ except Exception as e:
         failure {
             echo 'Pipeline échouée. Affichage des logs utiles...'
             sh 'docker compose -f docker-compose.ci.yml ps || true'
-            sh 'docker compose -f docker-compose.ci.yml logs --tail=120 backend || true'
-            sh 'docker compose -f docker-compose.ci.yml logs --tail=120 frontend || true'
-            sh 'docker compose -f docker-compose.ci.yml logs --tail=120 mysql || true'
+            sh 'docker compose -f docker-compose.ci.yml logs --tail=150 backend || true'
+            sh 'docker compose -f docker-compose.ci.yml logs --tail=150 frontend || true'
+            sh 'docker compose -f docker-compose.ci.yml logs --tail=150 mysql || true'
         }
     }
 }
