@@ -13,7 +13,8 @@ services:
       DB_USER: maf_user
       DB_PASSWORD: maf_password
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
 
   frontend:
     build:
@@ -41,6 +42,12 @@ services:
       - "3307:3306"
     volumes:
       - mysql_data_ci:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -proot_password || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
   adminer:
     image: adminer
@@ -49,7 +56,8 @@ services:
     ports:
       - "8081:8080"
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
 
 volumes:
   mysql_data_ci:
