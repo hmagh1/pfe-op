@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import FileUpload from "./components/FileUpload";
 import EnvDecisionTable from "./components/EnvDecisionTable";
 import SnifPreviewBox from "./components/SnifPreviewBox";
+import PrecheckBasicat from "./components/PrecheckBasicat";
 import {
   createJob,
   getJob,
@@ -17,6 +18,7 @@ import {
   listModelVersions,
   getDecisionStats,
   completeSnifReview,
+  precheckBasicat,
 } from "./services/api";
 import "./style.css";
 
@@ -24,6 +26,8 @@ function App() {
   const [basicat, setBasicat] = useState("");
   const [job, setJob] = useState(null);
   const [basicatError, setBasicatError] = useState("");
+  const [precheck, setPrecheck] = useState(null);
+  const [precheckLoading, setPrecheckLoading] = useState(false);
   const [toasts, setToasts] = useState([]);
 
   const [jobHistory, setJobHistory] = useState([]);
@@ -67,11 +71,60 @@ function App() {
     return `${(number * 100).toFixed(2)}%`;
   }
 
+  async function handlePrecheckBasicat() {
+    const cleanBasicat = String(basicat || "").trim().toUpperCase();
+
+    if (!cleanBasicat) {
+      setBasicatError("Veuillez saisir un BASICAT.");
+      notify("error", "Veuillez saisir un BASICAT avant le contrôle.");
+      return;
+    }
+
+    try {
+      setPrecheckLoading(true);
+      setBasicatError("");
+
+      const result = await precheckBasicat(cleanBasicat);
+      setPrecheck(result);
+
+      if (result.ready) {
+        notify("success", `BASICAT ${cleanBasicat} prêt pour traitement.`);
+      } else {
+        const errorMessage =
+          (result.errors || []).join(" | ") ||
+          `BASICAT ${cleanBasicat} non prêt pour traitement.`;
+
+        setBasicatError(errorMessage);
+        notify("error", errorMessage);
+      }
+    } catch (err) {
+      setPrecheck(null);
+      setBasicatError(err.message);
+      notify("error", `Erreur pre-check: ${err.message}`);
+    } finally {
+      setPrecheckLoading(false);
+    }
+  }
+
   async function startFr() {
     setBasicatError("");
 
+    const cleanBasicat = String(basicat || "").trim().toUpperCase();
+
+    if (!cleanBasicat) {
+      setBasicatError("Veuillez saisir un BASICAT.");
+      notify("error", "Veuillez saisir un BASICAT.");
+      return;
+    }
+
+    if (!precheck || precheck.basicat !== cleanBasicat || precheck.ready !== true) {
+      notify("error", "Veuillez d'abord contrôler le BASICAT avant de générer le FR.");
+      await handlePrecheckBasicat();
+      return;
+    }
+
     try {
-      const created = await createJob(basicat);
+      const created = await createJob(cleanBasicat);
       const result = await runFrJob(created.job_id);
       setJob(result);
       notify("success", "FR lancé avec succès.");
@@ -147,6 +200,7 @@ function App() {
       setJob(loadedJob);
       setBasicat(loadedJob.basicat || "");
       setBasicatError("");
+      setPrecheck(null);
       notify("success", `Job ${loadedJob.basicat || ""} chargé.`);
     } catch (err) {
       notify("error", `Erreur chargement job: ${err.message}`);
@@ -238,6 +292,8 @@ function App() {
     setJob(null);
     setBasicat("");
     setBasicatError("");
+    setPrecheck(null);
+    setPrecheckLoading(false);
   }
 async function finishSnifReview(envName) {
   try {
@@ -895,14 +951,30 @@ const canFinishSnifHistoricalReview =
             value={basicat}
             onChange={(e) => {
               setBasicat(e.target.value.toUpperCase());
+              setPrecheck(null);
               if (basicatError) setBasicatError("");
             }}
           />
 
-          <button onClick={startFr} disabled={!basicat}>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={handlePrecheckBasicat}
+            disabled={!basicat || precheckLoading}
+          >
+            {precheckLoading ? "Contrôle..." : "Contrôler le BASICAT"}
+          </button>
+
+          <button
+            onClick={startFr}
+            disabled={!basicat || precheckLoading || !precheck?.ready}
+            title={!precheck?.ready ? "Contrôle BASICAT obligatoire avant FR" : ""}
+          >
             Générer FR
           </button>
         </div>
+
+        <PrecheckBasicat precheck={precheck} loading={precheckLoading} />
       </section>
 
       {job && (

@@ -2,9 +2,9 @@ services:
   backend:
     build:
       context: ./backend
-    container_name: pfe-ops-backend
+    container_name: pfe-ops-ci-backend
     ports:
-      - "18000:8000"
+      - "18001:8000"
     environment:
       PYTHONUNBUFFERED: "1"
       DB_HOST: mysql
@@ -20,18 +20,18 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE_URL: http://127.0.0.1:18000/api
-    container_name: pfe-ops-frontend
+        VITE_API_BASE_URL: http://127.0.0.1:18001/api
+    container_name: pfe-ops-ci-frontend
     depends_on:
       - backend
     ports:
-      - "15175:15175"
+      - "15176:15175"
     environment:
-      VITE_API_BASE_URL: http://127.0.0.1:18000/api
+      VITE_API_BASE_URL: http://127.0.0.1:18001/api
 
   mysql:
     image: mysql:8.0
-    container_name: maf_mysql
+    container_name: maf_ci_mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: root_password
@@ -39,7 +39,7 @@ services:
       MYSQL_USER: maf_user
       MYSQL_PASSWORD: maf_password
     ports:
-      - "3307:3306"
+      - "3308:3306"
     volumes:
       - mysql_data_ci:/var/lib/mysql
     healthcheck:
@@ -51,10 +51,10 @@ services:
 
   adminer:
     image: adminer
-    container_name: maf_adminer
+    container_name: maf_ci_adminer
     restart: unless-stopped
     ports:
-      - "8081:8080"
+      - "8082:8080"
     depends_on:
       mysql:
         condition: service_healthy

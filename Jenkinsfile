@@ -14,12 +14,12 @@ pipeline {
             }
         }
 
-        stage('Clean Old Containers') {
+        stage('Clean Old CI Containers') {
             steps {
-                echo 'Nettoyage des anciens conteneurs CI...'
+                echo 'Nettoyage des anciens conteneurs CI sans supprimer la base CI...'
                 sh '''
-                    docker rm -f maf_mysql maf_adminer pfe-ops-backend pfe-ops-frontend || true
-                    docker compose -f docker-compose.ci.yml down -v --remove-orphans || true
+                    docker rm -f maf_ci_mysql maf_ci_adminer pfe-ops-ci-backend pfe-ops-ci-frontend || true
+                    docker compose -f docker-compose.ci.yml down --remove-orphans || true
                 '''
             }
         }
@@ -31,27 +31,27 @@ pipeline {
             }
         }
 
-        stage('Start Services') {
+        stage('Start CI Services') {
             steps {
                 echo 'Démarrage des services CI...'
                 sh 'docker compose -f docker-compose.ci.yml up -d mysql backend frontend adminer'
             }
         }
 
-        stage('Show Containers') {
+        stage('Show CI Containers') {
             steps {
-                echo 'État des conteneurs...'
+                echo 'État des conteneurs CI...'
                 sh 'docker compose -f docker-compose.ci.yml ps'
             }
         }
 
         stage('Backend Health Check') {
             steps {
-                echo 'Vérification API backend...'
+                echo 'Vérification API backend CI...'
                 sh '''
                     sleep 25
 
-                    docker exec pfe-ops-backend python -c "
+                    docker exec pfe-ops-ci-backend python -c "
 import urllib.request
 import sys
 
@@ -70,13 +70,13 @@ except Exception as e:
 
         stage('Frontend Health Check') {
             steps {
-                echo 'Vérification frontend...'
+                echo 'Vérification frontend CI...'
                 sh '''
-                    docker exec pfe-ops-frontend node -e "
+                    docker exec pfe-ops-ci-frontend node -e "
 fetch('http://127.0.0.1:15175')
   .then(r => {
     if (!r.ok) process.exit(1);
-    console.log('Frontend OK');
+    console.log('Frontend CI OK');
   })
   .catch(e => {
     console.error(e);
@@ -89,9 +89,9 @@ fetch('http://127.0.0.1:15175')
 
         stage('API Jobs Check') {
             steps {
-                echo 'Vérification route /api/jobs...'
+                echo 'Vérification route /api/jobs CI...'
                 sh '''
-                    docker exec pfe-ops-backend python -c "
+                    docker exec pfe-ops-ci-backend python -c "
 import urllib.request
 import sys
 
@@ -110,9 +110,9 @@ except Exception as e:
 
         stage('MAF Functional Workflow Test') {
             steps {
-                echo 'Test fonctionnel métier MAF + ML...'
+                echo 'Test fonctionnel métier MAF + ML sur environnement CI...'
                 sh '''
-                    docker exec pfe-ops-backend python /app/ci_test_maf_workflow.py
+                    docker exec pfe-ops-ci-backend python /app/ci_test_maf_workflow.py
                 '''
             }
         }

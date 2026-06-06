@@ -27,7 +27,7 @@ from app.services.job_store import (
     get_decision_stats,
 )
 from app.services import llm_service, ml_service, maf_core
-
+from app.services.precheck_service import precheck_basicat
 
 router = APIRouter()
 
@@ -106,13 +106,20 @@ def get_job_decisions_history(job_id: str):
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-
+@router.get("/precheck-basicat/{basicat}")
+def precheck_basicat_route(basicat: str):
+    try:
+        return precheck_basicat(basicat)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 @router.get("/jobs/{job_id}")
 def get_maf_job(job_id: str):
     try:
         return get_job(job_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
 
 
 @router.post("/jobs/{job_id}/decisions")

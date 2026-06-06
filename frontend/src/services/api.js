@@ -228,3 +228,12 @@ export async function getDecisionStats() {
 
   return res.json();
 }
+export async function precheckBasicat(basicat) {
+  const res = await fetch(`${API_BASE}/precheck-basicat/${encodeURIComponent(basicat)}`);
+
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+
+  return res.json();
+}
