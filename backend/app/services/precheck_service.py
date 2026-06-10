@@ -70,12 +70,13 @@ def _detect_envs(df_vmliste: pd.DataFrame, basicat_col: str, basicat: str) -> Li
     """
     Détecte les environnements disponibles pour un BASICAT.
 
-    Logique:
-    - Si la colonne PRODUCTION contient PROD / PRODUCTION / OUI / YES / 1 => prod
-    - Si elle contient UTILISATION / HORS_PROD / RECETTE / QUALIF / DEV / TEST / UAT => horsprod
-    - Si plusieurs lignes existent pour le même BASICAT, on analyse toutes les lignes.
-    - Si rien n'est clair mais que le BASICAT existe, on met prod par défaut pour ne pas bloquer.
+    Règle métier retenue :
+    - Si PRODUCTION = X / PROD / PRODUCTION / OUI / YES / TRUE / 1 => prod
+    - Si PRODUCTION est vide ou indique hors production => horsprod
+    - On ne se base pas sur UTILISATION, car certaines lignes peuvent contenir
+      'preproduction' même lorsque PRODUCTION = X.
     """
+
     rows = df_vmliste[
         df_vmliste[basicat_col].astype(str).str.strip().str.upper()
         == str(basicat).strip().upper()
@@ -88,87 +89,54 @@ def _detect_envs(df_vmliste: pd.DataFrame, basicat_col: str, basicat: str) -> Li
 
     prod_col = _find_column(df_vmliste, "PRODUCTION")
 
-    if prod_col:
-        values = rows[prod_col].astype(str).str.strip().str.upper().tolist()
+    if not prod_col:
+        envs.add("prod")
+    else:
+        prod_values = {
+            "X",
+            "PROD",
+            "PRODUCTION",
+            "OUI",
+            "YES",
+            "Y",
+            "TRUE",
+            "1",
+        }
 
-        for value in values:
-            value_clean = str(value or "").strip().upper()
+        horsprod_values = {
+            "",
+            "N",
+            "NO",
+            "NON",
+            "FALSE",
+            "0",
+            "HORS_PROD",
+            "HORSPROD",
+            "HORS PROD",
+            "HORS-PROD",
+            "DEV",
+            "TEST",
+            "RECETTE",
+            "QUALIF",
+            "QUALIFICATION",
+            "UAT",
+            "PREPROD",
+            "PRE PROD",
+            "PRE-PROD",
+        }
 
-            if not value_clean:
+        for _, row in rows.iterrows():
+            production_value = str(row.get(prod_col, "") or "").strip().upper()
+
+            if production_value in prod_values:
+                envs.add("prod")
+            elif production_value in horsprod_values:
+                envs.add("horsprod")
+            else:
+                # Si la valeur est inconnue, on ne force pas prod/horsprod.
+                # On laisse la sécurité plus bas décider.
                 continue
 
-            # Cas production explicite
-            if value_clean in [
-                "PROD",
-                "PRODUCTION",
-                "OUI",
-                "YES",
-                "Y",
-                "TRUE",
-                "1",
-            ]:
-                envs.add("prod")
-
-            # Cas hors production explicite
-            if value_clean in [
-                "HORS_PROD",
-                "HORSPROD",
-                "HORS PROD",
-                "UTILISATION",
-                "RECETTE",
-                "QUALIFICATION",
-                "QUALIF",
-                "DEV",
-                "TEST",
-                "UAT",
-                "PREPROD",
-                "PRE-PROD",
-                "PRE PROD",
-            ]:
-                envs.add("horsprod")
-
-            # Cas où la cellule contient plusieurs mots ou une phrase
-            if "PROD" in value_clean or "PRODUCTION" in value_clean:
-                envs.add("prod")
-
-            if (
-                "HORS" in value_clean
-                or "UTILISATION" in value_clean
-                or "RECETTE" in value_clean
-                or "QUALIF" in value_clean
-                or "DEV" in value_clean
-                or "TEST" in value_clean
-                or "UAT" in value_clean
-                or "PREPROD" in value_clean
-                or "PRE-PROD" in value_clean
-                or "PRE PROD" in value_clean
-            ):
-                envs.add("horsprod")
-
-    # Détection additionnelle depuis toutes les colonnes si jamais la colonne PRODUCTION
-    # n'est pas assez explicite.
-    for _, row in rows.iterrows():
-        row_text = " ".join([str(v or "").strip().upper() for v in row.values])
-
-        if "PROD" in row_text or "PRODUCTION" in row_text:
-            envs.add("prod")
-
-        if (
-            "HORS" in row_text
-            or "UTILISATION" in row_text
-            or "RECETTE" in row_text
-            or "QUALIF" in row_text
-            or "DEV" in row_text
-            or "TEST" in row_text
-            or "UAT" in row_text
-            or "PREPROD" in row_text
-            or "PRE-PROD" in row_text
-            or "PRE PROD" in row_text
-        ):
-            envs.add("horsprod")
-
-    # Sécurité : si aucune valeur claire mais BASICAT existe,
-    # on met prod par défaut pour ne pas bloquer le workflow.
     if not envs:
         envs.add("prod")
 

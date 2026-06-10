@@ -16,6 +16,34 @@ export default function PrecheckBasicat({ precheck, loading }) {
 
   const ready = precheck.ready === true;
 
+  const detectedEnvs = Array.isArray(precheck.detected_envs)
+    ? precheck.detected_envs
+        .map((env) => String(env || "").trim().toLowerCase())
+        .filter((env) => env !== "")
+        .map((env) => {
+          if (env === "hors_prod" || env === "hors-prod") {
+            return "horsprod";
+          }
+          return env;
+        })
+    : [];
+
+  const uniqueDetectedEnvs = Array.from(new Set(detectedEnvs));
+
+  const envLabel = uniqueDetectedEnvs
+    .map((env) => {
+      if (env === "prod") {
+        return "PROD";
+      }
+
+      if (env === "horsprod") {
+        return "HORSPROD";
+      }
+
+      return env.toUpperCase();
+    })
+    .join(", ");
+
   return (
     <div className="card">
       <h3>Contrôle BASICAT</h3>
@@ -36,10 +64,9 @@ export default function PrecheckBasicat({ precheck, loading }) {
         </strong>
       </div>
 
-      {precheck.detected_envs && precheck.detected_envs.length > 0 && (
+      {uniqueDetectedEnvs.length > 0 && (
         <p>
-          <strong>Environnement détecté :</strong>{" "}
-          {precheck.detected_envs.join(", ").toUpperCase()}
+          <strong>Environnement détecté :</strong> {envLabel}
         </p>
       )}
 
@@ -49,14 +76,17 @@ export default function PrecheckBasicat({ precheck, loading }) {
             <strong>Lignes VLISTE :</strong>{" "}
             {precheck.summary.basicat_rows ?? 0}
           </p>
+
           <p>
             <strong>Modèle ML :</strong>{" "}
             {precheck.summary.model_available ? "Disponible" : "Non disponible"}
           </p>
+
           <p>
             <strong>Versions ML :</strong>{" "}
             {precheck.summary.model_versions_count ?? 0}
           </p>
+
           <p>
             <strong>Décisions historiques :</strong>{" "}
             {precheck.summary.historical_decisions_count ?? 0}
@@ -67,9 +97,10 @@ export default function PrecheckBasicat({ precheck, loading }) {
       {precheck.errors && precheck.errors.length > 0 && (
         <div className="error-box">
           <strong>Erreurs :</strong>
+
           <ul>
             {precheck.errors.map((err, index) => (
-              <li key={index}>{err}</li>
+              <li key={`error-${index}`}>{err}</li>
             ))}
           </ul>
         </div>
@@ -78,9 +109,10 @@ export default function PrecheckBasicat({ precheck, loading }) {
       {precheck.warnings && precheck.warnings.length > 0 && (
         <div className="warning-box">
           <strong>Avertissements :</strong>
+
           <ul>
             {precheck.warnings.map((warning, index) => (
-              <li key={index}>{warning}</li>
+              <li key={`warning-${index}`}>{warning}</li>
             ))}
           </ul>
         </div>
@@ -95,9 +127,10 @@ export default function PrecheckBasicat({ precheck, loading }) {
               <th>Détail</th>
             </tr>
           </thead>
+
           <tbody>
             {(precheck.checks || []).map((check, index) => (
-              <tr key={index}>
+              <tr key={`check-${index}`}>
                 <td>{check.name}</td>
                 <td>{check.ok ? "✅ OK" : "❌ KO"}</td>
                 <td>{check.message}</td>
